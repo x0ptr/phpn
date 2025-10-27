@@ -1,0 +1,29 @@
+{
+    "name": "phpn/phpn",
+    "description": "Build native desktop applications with PHP",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "PHPN Contributors"
+        }
+    ],
+    "require": {
+        "php": ">=8.1"
+    },
+    "bin": [
+        "bin/phpn"
+    ],
+    "autoload": {
+        "psr-4": {
+            "PHPN\\": "src/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "PHPN\\Laravel\\PHPNServiceProvider"
+            ]
+        }
+    }
+}

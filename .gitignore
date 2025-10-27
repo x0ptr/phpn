@@ -1,0 +1,61 @@
+# Build directories
+native/macos/build/
+native/macos/php-build/
+native/macos/runtime/
+native/windows/build/
+native/linux/build/
+dist/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Compiled binaries
+*.o
+*.lo
+*.a
+*.dylib
+*.so
+*.dll
+*.exe
+phpn-runtime
+phpn-runtime.app/
+
+# PHP
+vendor/
+composer.lock
+.phpunit.result.cache
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+*.cache
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+!CMakeLists.txt
+
+# Downloaded archives
+*.tar.gz
+*.zip
+*.tgz
+
+# PHP compiled files
+*.dep
+

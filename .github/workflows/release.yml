@@ -1,0 +1,82 @@
+name: Build Releases
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install dependencies
+        run: brew install cmake pkg-config
+      
+      - name: Build runtime
+        run: |
+          cd native/macos
+          ./build.sh
+      
+      - name: Create release archive
+        run: |
+          ARCH=$(uname -m)
+          mkdir -p dist
+          cd native/macos
+          tar -czf ../../dist/phpn-macos-${ARCH}.tar.gz build runtime
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: phpn-macos
+          path: dist/*.tar.gz
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake pkg-config build-essential libxml2-dev libsqlite3-dev
+      
+      - name: Build runtime
+        run: |
+          cd native/linux
+          ./build.sh || echo "Linux build not yet implemented"
+      
+      - name: Create release archive
+        run: |
+          ARCH=$(uname -m)
+          mkdir -p dist
+          cd native/linux
+          tar -czf ../../dist/phpn-linux-${ARCH}.tar.gz build runtime || true
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: phpn-linux
+          path: dist/*.tar.gz
+        continue-on-error: true
+
+  create-release:
+    needs: [build-macos, build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            phpn-macos/*.tar.gz
+            phpn-linux/*.tar.gz
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,348 @@
+#!/usr/bin/env php
+<?php
+
+define('PHPN_VERSION', '0.0.3');
+define('PHPN_REPO', 'x0ptr/phpn');
+
+function detectPlatform() {
+    $os = PHP_OS_FAMILY;
+    $arch = php_uname('m');
+    
+    return [
+        'os' => $os,
+        'arch' => $arch
+    ];
+}
+
+function getReleaseAssetName() {
+    $platform = detectPlatform();
+    
+    switch ($platform['os']) {
+        case 'Darwin':
+            return 'phpn-macos-' . $platform['arch'] . '.tar.gz';
+        case 'Windows':
+            return 'phpn-windows-' . $platform['arch'] . '.zip';
+        case 'Linux':
+            return 'phpn-linux-' . $platform['arch'] . '.tar.gz';
+        default:
+            return null;
+    }
+}
+
+function downloadPrebuiltRuntime() {
+    $baseDir = dirname(__DIR__);
+    $platform = detectPlatform();
+    $assetName = getReleaseAssetName();
+    
+    if (!$assetName) {
+        return false;
+    }
+    
+    echo "Checking for prebuilt runtime...\n";
+    
+    $version = PHPN_VERSION;
+    $repo = PHPN_REPO;
+    $releaseUrl = "https://api.github.com/repos/{$repo}/releases/tags/v{$version}";
+    
+    $ch = curl_init($releaseUrl);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_USERAGENT, 'PHPN-Installer');
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+    
+    $token = getenv('GITHUB_TOKEN');
+    if ($token) {
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ["Authorization: token {$token}"]);
+    }
+    
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    
+    if ($httpCode !== 200) {
+        echo "No prebuilt release found for v{$version}\n";
+        return false;
+    }
+    
+    $release = json_decode($response, true);
+    $downloadUrl = null;
+    
+    foreach ($release['assets'] ?? [] as $asset) {
+        if ($asset['name'] === $assetName) {
+            $downloadUrl = $asset['browser_download_url'];
+            break;
+        }
+    }
+    
+    if (!$downloadUrl) {
+        echo "No prebuilt binary for {$assetName}\n";
+        return false;
+    }
+    
+    echo "Downloading prebuilt runtime from GitHub...\n";
+    
+    $tmpFile = sys_get_temp_dir() . '/' . $assetName;
+    $ch = curl_init($downloadUrl);
+    $fp = fopen($tmpFile, 'w');
+    curl_setopt($ch, CURLOPT_FILE, $fp);
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+    curl_setopt($ch, CURLOPT_USERAGENT, 'PHPN-Installer');
+    
+    if ($token) {
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ["Authorization: token {$token}"]);
+    }
+    
+    curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    fclose($fp);
+    
+    if ($httpCode !== 200) {
+        unlink($tmpFile);
+        echo "Download failed\n";
+        return false;
+    }
+    
+    echo "Extracting runtime...\n";
+    
+    $extractDir = $baseDir . '/native/' . strtolower($platform['os']);
+    
+    if (strpos($assetName, '.tar.gz') !== false) {
+        passthru("cd " . escapeshellarg($extractDir) . " && tar -xzf " . escapeshellarg($tmpFile), $exitCode);
+    } else {
+        passthru("cd " . escapeshellarg($extractDir) . " && unzip -o " . escapeshellarg($tmpFile), $exitCode);
+    }
+    
+    unlink($tmpFile);
+    
+    if ($exitCode === 0) {
+        echo "Prebuilt runtime installed successfully!\n";
+        return true;
+    }
+    
+    return false;
+}
+
+function getRuntimePath() {
+    $platform = detectPlatform();
+    $baseDir = dirname(__DIR__);
+    
+    switch ($platform['os']) {
+        case 'Darwin':
+            return $baseDir . '/native/macos/build/phpn-runtime';
+        default:
+            return null;
+    }
+}
+
+function showHelp() {
+    echo "PHPN - PHP Native Desktop Applications\n";
+    echo "Version: " . PHPN_VERSION . "\n\n";
+    echo "Usage:\n";
+    echo "  phpn run <entry-file> [options]  Run a PHPN application\n";
+    echo "  phpn build                       Build the native runtime\n";
+    echo "  phpn bundle <app-dir> <name>     Create a .app bundle (macOS)\n";
+    echo "  phpn version                     Show version information\n";
+    echo "  phpn help                        Show this help message\n";
+    echo "\n";
+    echo "Options:\n";
+    echo "  --width=<pixels>                 Window width (default: 1200)\n";
+    echo "  --height=<pixels>                Window height (default: 800)\n";
+    echo "  --title=<text>                   Window title\n";
+    echo "  --icon=<path>                    App icon (.icns file, bundle only)\n";
+    echo "\n";
+    echo "Examples:\n";
+    echo "  phpn run public/index.php\n";
+    echo "  phpn run app.php --width=1600 --height=900\n";
+    echo "  phpn run app.php --title=\"My App\"\n";
+    echo "  phpn bundle ./my-app \"My App\" --icon=icon.icns\n";
+    echo "\n";
+}
+
+function parseOptions($argv) {
+    $options = [
+        'width' => null,
+        'height' => null,
+        'title' => null,
+        'icon' => null
+    ];
+    
+    foreach ($argv as $arg) {
+        if (strpos($arg, '--width=') === 0) {
+            $options['width'] = (int)substr($arg, 8);
+        } elseif (strpos($arg, '--height=') === 0) {
+            $options['height'] = (int)substr($arg, 9);
+        } elseif (strpos($arg, '--title=') === 0) {
+            $options['title'] = substr($arg, 8);
+        } elseif (strpos($arg, '--icon=') === 0) {
+            $options['icon'] = substr($arg, 7);
+        }
+    }
+    
+    return $options;
+}
+
+function runApp($entryFile, $options) {
+    if (!file_exists($entryFile)) {
+        echo "Error: Entry file not found: $entryFile\n";
+        exit(1);
+    }
+    
+    $runtimePath = getRuntimePath();
+    
+    if (!$runtimePath || !file_exists($runtimePath)) {
+        echo "Runtime not found.\n";
+        
+        if (!downloadPrebuiltRuntime()) {
+            echo "Building from source...\n\n";
+            buildRuntime();
+        }
+        
+        if (!file_exists($runtimePath)) {
+            echo "Error: Failed to get runtime.\n";
+            exit(1);
+        }
+    }
+    
+    $absolutePath = realpath($entryFile);
+    
+    putenv('PHPN_WINDOW_WIDTH=' . $options['width']);
+    putenv('PHPN_WINDOW_HEIGHT=' . $options['height']);
+    if ($options['title']) {
+        putenv('PHPN_WINDOW_TITLE=' . $options['title']);
+    }
+    
+    $command = escapeshellarg($runtimePath) . ' ' . escapeshellarg($absolutePath);
+    
+    echo "Starting PHPN application...\n";
+    echo "Window: {$options['width']}x{$options['height']}\n";
+    if ($options['title']) {
+        echo "Title: {$options['title']}\n";
+    }
+    passthru($command, $exitCode);
+    exit($exitCode);
+}
+
+function buildRuntime() {
+    $platform = detectPlatform();
+    $baseDir = dirname(__DIR__);
+    
+    switch ($platform['os']) {
+        case 'Darwin':
+            $buildScript = $baseDir . '/native/macos/build.sh';
+            if (!file_exists($buildScript)) {
+                echo "Error: Build script not found: $buildScript\n";
+                return false;
+            }
+            echo "Building PHPN runtime for macOS...\n";
+            passthru("cd " . escapeshellarg(dirname($buildScript)) . " && ./build.sh", $exitCode);
+            return $exitCode === 0;
+            
+        case 'Windows':
+            echo "Windows build not yet implemented.\n";
+            echo "Please build manually using CMake.\n";
+            return false;
+            
+        case 'Linux':
+            echo "Linux build not yet implemented.\n";
+            echo "Please build manually using CMake.\n";
+            return false;
+            
+        default:
+            echo "Unsupported platform: {$platform['os']}\n";
+            return false;
+    }
+}
+
+function showVersion() {
+    $platform = detectPlatform();
+    echo "PHPN version " . PHPN_VERSION . "\n";
+    echo "Platform: {$platform['os']} ({$platform['arch']})\n";
+    echo "PHP version: " . PHP_VERSION . "\n";
+}
+
+function bundleApp($appDir, $appName, $options = []) {
+    $platform = detectPlatform();
+    $baseDir = dirname(__DIR__);
+    
+    if ($platform['os'] !== 'Darwin') {
+        echo "Error: App bundling is currently only supported on macOS.\n";
+        exit(1);
+    }
+    
+    if (!is_dir($appDir)) {
+        echo "Error: Application directory not found: $appDir\n";
+        exit(1);
+    }
+    
+    $runtimePath = getRuntimePath();
+    if (!$runtimePath || !file_exists($runtimePath)) {
+        echo "Runtime not found.\n";
+        
+        if (!downloadPrebuiltRuntime()) {
+            echo "Building from source...\n\n";
+            buildRuntime();
+        }
+        
+        if (!file_exists($runtimePath)) {
+            echo "Error: Failed to get runtime.\n";
+            exit(1);
+        }
+    }
+    
+    $bundleScript = $baseDir . '/native/macos/bundle-app.sh';
+    if (!file_exists($bundleScript)) {
+        echo "Error: Bundle script not found: $bundleScript\n";
+        exit(1);
+    }
+    
+    $cmd = escapeshellarg($bundleScript) . ' ' . escapeshellarg($appDir) . ' ' . escapeshellarg($appName);
+    
+    if (isset($options['icon'])) {
+        $cmd .= ' --icon=' . escapeshellarg($options['icon']);
+    }
+    
+    passthru($cmd, $exitCode);
+    exit($exitCode);
+}
+
+$command = $argv[1] ?? 'help';
+
+switch ($command) {
+    case 'run':
+        if (!isset($argv[2])) {
+            echo "Error: Entry file not specified.\n";
+            echo "Usage: phpn run <entry-file> [options]\n";
+            exit(1);
+        }
+        $options = parseOptions(array_slice($argv, 2));
+        runApp($argv[2], $options);
+        break;
+        
+    case 'build':
+        $success = buildRuntime();
+        exit($success ? 0 : 1);
+        break;
+        
+    case 'bundle':
+        if (!isset($argv[2]) || !isset($argv[3])) {
+            echo "Error: Missing arguments.\n";
+            echo "Usage: phpn bundle <app-directory> <app-name> [--icon=path.icns]\n";
+            exit(1);
+        }
+        $options = parseOptions(array_slice($argv, 3));
+        bundleApp($argv[2], $argv[3], $options);
+        break;
+        
+    case 'version':
+    case '--version':
+    case '-v':
+        showVersion();
+        break;
+        
+    case 'help':
+    case '--help':
+    case '-h':
+    default:
+        showHelp();
+        break;
+}
