@@ -205,16 +205,23 @@ function runApp($entryFile, $options) {
     
     $absolutePath = realpath($entryFile);
     
-    putenv('PHPN_WINDOW_WIDTH=' . $options['width']);
-    putenv('PHPN_WINDOW_HEIGHT=' . $options['height']);
+    if ($options['width'] !== null) {
+        putenv('PHPN_WINDOW_WIDTH=' . $options['width']);
+    }
+    if ($options['height'] !== null) {
+        putenv('PHPN_WINDOW_HEIGHT=' . $options['height']);
+    }
     if ($options['title']) {
         putenv('PHPN_WINDOW_TITLE=' . $options['title']);
     }
     
     $command = escapeshellarg($runtimePath) . ' ' . escapeshellarg($absolutePath);
     
+    $width = $options['width'] ?? 1200;
+    $height = $options['height'] ?? 800;
+    
     echo "Starting PHPN application...\n";
-    echo "Window: {$options['width']}x{$options['height']}\n";
+    echo "Window: {$width}x{$height}\n";
     if ($options['title']) {
         echo "Title: {$options['title']}\n";
     }
