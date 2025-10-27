@@ -184,7 +184,7 @@ Also I like PHP.
 
 ## License
 
-MIT
+MIT - See [LICENSE](LICENSE) file for details.
 
 - [ ] Menu bar integration
 - [ ] Windows support (Win32/WebView2)
