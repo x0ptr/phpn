@@ -2,7 +2,7 @@
 
 PHP Native - Build desktop apps with PHP and native WebKit.
 
-I got tired of Electron apps eating all my RAM, so I made this. Uses your system's WebKit (Safari on macOS) instead of bundling Chromium.
+https://github.com/user-attachments/assets/fbf6d3f2-e1f4-487d-adfb-f104e6004d1f
 
 ## Why?
 
@@ -13,6 +13,7 @@ I got tired of Electron apps eating all my RAM, so I made this. Uses your system
 - Proper $_GET, $_POST, $_COOKIE support
 
 ## Requirements
+
 
 - PHP 8.1+
 - macOS 11+ (Windows/Linux support coming)
