@@ -11,7 +11,10 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        // Disable CSRF for desktop app - we don't need cross-site protection
+        $middleware->validateCsrfTokens(except: [
+            '*'
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

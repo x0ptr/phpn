@@ -6,37 +6,76 @@
 #include <libgen.h>
 #include <sys/time.h>
 #include <time.h>
+#include <fcntl.h>
+
+static PHPRuntime *current_runtime = NULL;
+
+static int phpn_header_handler(sapi_header_struct *sapi_header, sapi_header_op_enum op, sapi_headers_struct *sapi_headers)
+{
+    if (sapi_headers->http_response_code != 200 && sapi_headers->http_response_code != 0) {
+        fprintf(stderr, "PHP Response Status: %d\n", sapi_headers->http_response_code);
+    }
+    
+    if (sapi_header && sapi_header->header) {
+        const char *header = sapi_header->header;
+        
+        if (strncasecmp(header, "Set-Cookie:", 11) == 0) {
+            const char *cookie_start = header + 11;
+            while (*cookie_start == ' ') cookie_start++;
+            
+            const char *equals = strchr(cookie_start, '=');
+            if (equals) {
+                int name_len = equals - cookie_start;
+                fprintf(stderr, "Set-Cookie: %.*s=...\n", name_len, cookie_start);
+            }
+            
+            if (current_runtime && current_runtime->cookie_count < MAX_COOKIES) {
+                current_runtime->response_cookies[current_runtime->cookie_count].header = strdup(header);
+                current_runtime->cookie_count++;
+            }
+        }
+        
+        if (strncasecmp(header, "Content-Type:", 13) == 0) {
+            fprintf(stderr, "Response %s\n", header);
+        }
+        
+        if (strncasecmp(header, "Location:", 9) == 0) {
+            fprintf(stderr, "Response %s\n", header);
+        }
+    }
+    
+    return SAPI_HEADER_ADD;
+}
 
 PHPRuntime *php_runtime_create(const char *document_root)
 {
     PHPRuntime *runtime = malloc(sizeof(PHPRuntime));
     runtime->document_root = strdup(document_root);
     runtime->request_count = 0;
+    runtime->cookie_count = 0;
+    
+    for (int i = 0; i < MAX_COOKIES; i++) {
+        runtime->response_cookies[i].header = NULL;
+    }
 
     php_embed_init(0, NULL);
+    
+    sapi_module.header_handler = phpn_header_handler;
 
     char ini_settings[512];
     snprintf(ini_settings, sizeof(ini_settings),
              "document_root=%s\ninclude_path=%s",
              document_root, document_root);
 
-    char session_path[1024];
-    snprintf(session_path, sizeof(session_path), "%s/storage/framework/sessions", document_root);
-
-    mkdir_p(session_path);
-
-    zend_alter_ini_entry_chars("session.save_path", session_path, strlen(session_path),
-                               PHP_INI_SYSTEM, PHP_INI_STAGE_RUNTIME);
-    zend_alter_ini_entry_chars("session.gc_probability", "1", 1,
-                               PHP_INI_SYSTEM, PHP_INI_STAGE_RUNTIME);
-    zend_alter_ini_entry_chars("session.gc_divisor", "100", 3,
-                               PHP_INI_SYSTEM, PHP_INI_STAGE_RUNTIME);
-
     return runtime;
 }
 
 char *php_runtime_execute(PHPRuntime *runtime, const char *script_path, const char *request_uri, PHPRequest *request)
 {
+    php_runtime_clear_response_cookies(runtime);
+    
+    current_runtime = runtime;
+    
     if (runtime->request_count > 0)
     {
         php_request_shutdown(NULL);
@@ -131,6 +170,14 @@ char *php_runtime_execute(PHPRuntime *runtime, const char *script_path, const ch
     zend_hash_str_update(Z_ARRVAL(PG(http_globals)[TRACK_VARS_SERVER]),
                          "REMOTE_ADDR", sizeof("REMOTE_ADDR") - 1, &server_var);
 
+    if (request && request->xsrf_token)
+    {
+        ZVAL_STRING(&server_var, request->xsrf_token);
+        zend_hash_str_update(Z_ARRVAL(PG(http_globals)[TRACK_VARS_SERVER]),
+                             "HTTP_X_XSRF_TOKEN", sizeof("HTTP_X_XSRF_TOKEN") - 1, &server_var);
+        fprintf(stderr, "X-XSRF-TOKEN header: %.30s...\n", request->xsrf_token);
+    }
+
     ZVAL_LONG(&server_var, (zend_long)time(NULL));
     zend_hash_str_update(Z_ARRVAL(PG(http_globals)[TRACK_VARS_SERVER]),
                          "REQUEST_TIME", sizeof("REQUEST_TIME") - 1, &server_var);
@@ -210,6 +257,8 @@ char *php_runtime_execute(PHPRuntime *runtime, const char *script_path, const ch
 
     if (request && request->post_data && request->post_data_length > 0)
     {
+        fprintf(stderr, "Parsing POST data (%zu bytes):\n", request->post_data_length);
+        
         if (request->content_type)
         {
             ZVAL_STRING(&server_var, request->content_type);
@@ -234,9 +283,34 @@ char *php_runtime_execute(PHPRuntime *runtime, const char *script_path, const ch
                     *equals = '\0';
                     char *key = pair;
                     char *value = equals + 1;
+                    
+                    char decoded_value[1024];
+                    int j = 0;
+                    for (int i = 0; value[i] && j < 1023; i++)
+                    {
+                        if (value[i] == '%' && value[i + 1] && value[i + 2])
+                        {
+                            int hex;
+                            sscanf(&value[i + 1], "%2x", &hex);
+                            decoded_value[j++] = (char)hex;
+                            i += 2;
+                        }
+                        else if (value[i] == '+')
+                        {
+                            decoded_value[j++] = ' ';
+                        }
+                        else
+                        {
+                            decoded_value[j++] = value[i];
+                        }
+                    }
+                    decoded_value[j] = '\0';
+                    
+                    fprintf(stderr, "  POST[%s] = %s\n", key, 
+                            strcmp(key, "_token") == 0 || strcmp(key, "password") == 0 ? "(hidden)" : decoded_value);
 
                     zval post_var;
-                    ZVAL_STRING(&post_var, value);
+                    ZVAL_STRING(&post_var, decoded_value);
                     zend_hash_str_update(Z_ARRVAL(PG(http_globals)[TRACK_VARS_POST]),
                                          key, strlen(key), &post_var);
                 }
@@ -252,6 +326,7 @@ char *php_runtime_execute(PHPRuntime *runtime, const char *script_path, const ch
         zend_hash_str_update(Z_ARRVAL(PG(http_globals)[TRACK_VARS_SERVER]),
                              "HTTP_COOKIE", sizeof("HTTP_COOKIE") - 1, &server_var);
 
+        fprintf(stderr, "Parsing cookies:\n");
         char *cookie_copy = strdup(request->cookies);
         char *saveptr;
         char *pair = strtok_r(cookie_copy, ";", &saveptr);
@@ -266,6 +341,12 @@ char *php_runtime_execute(PHPRuntime *runtime, const char *script_path, const ch
                 *equals = '\0';
                 char *key = pair;
                 char *value = equals + 1;
+                
+                if (strlen(value) > 20) {
+                    fprintf(stderr, "  Cookie[%s] = %.20s...\n", key, value);
+                } else {
+                    fprintf(stderr, "  Cookie[%s] = %s\n", key, value);
+                }
 
                 zval cookie_var;
                 ZVAL_STRING(&cookie_var, value);
@@ -300,15 +381,34 @@ char *php_runtime_execute(PHPRuntime *runtime, const char *script_path, const ch
     zval_ptr_dtor(&return_value);
     php_output_end();
 
-    // Note: We don't shutdown here because we want to keep the runtime alive
-    // for subsequent requests. Shutdown happens at the START of the next request.
-
     return output;
 }
 
 void php_runtime_destroy(PHPRuntime *runtime)
 {
     php_embed_shutdown();
+    
+    php_runtime_clear_response_cookies(runtime);
+    
     free(runtime->document_root);
     free(runtime);
+}
+
+CookieHeader* php_runtime_get_response_cookies(PHPRuntime *runtime, int *count)
+{
+    if (count) {
+        *count = runtime->cookie_count;
+    }
+    return runtime->response_cookies;
+}
+
+void php_runtime_clear_response_cookies(PHPRuntime *runtime)
+{
+    for (int i = 0; i < runtime->cookie_count; i++) {
+        if (runtime->response_cookies[i].header) {
+            free(runtime->response_cookies[i].header);
+            runtime->response_cookies[i].header = NULL;
+        }
+    }
+    runtime->cookie_count = 0;
 }

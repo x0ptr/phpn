@@ -17,7 +17,7 @@
 }
 
 - (void)applicationDidFinishLaunching:(NSNotification *)notification {
-    NSLog(@"PHPN Starting");
+    NSLog(@"━━━ PHPN STARTING ━━━");
     NSLog(@"App Path: %@", self.appPath);
     
     [self setupMenuBar];
@@ -42,21 +42,16 @@
                                                            title:self.windowTitle];
     self.mainWindow = window;
     
-    NSLog(@"Window created: %@", window);
-    NSLog(@"Window frame: %@", NSStringFromRect([window frame]));
-    
     [window makeKeyAndOrderFront:nil];
     [window orderFrontRegardless];
     [NSApp activateIgnoringOtherApps:YES];
     
-    NSLog(@"Window should be visible now");
-    NSLog(@"PHPN Ready");
+    NSLog(@"━━━ PHPN READY ━━━");
 }
 
 - (void)setupMenuBar {
     NSMenu *mainMenu = [[NSMenu alloc] init];
     
-    // App Menu
     NSMenuItem *appMenuItem = [[NSMenuItem alloc] init];
     NSMenu *appMenu = [[NSMenu alloc] init];
     
@@ -67,7 +62,6 @@
     [appMenuItem setSubmenu:appMenu];
     [mainMenu addItem:appMenuItem];
     
-    // File Menu
     NSMenuItem *fileMenuItem = [[NSMenuItem alloc] init];
     NSMenu *fileMenu = [[NSMenu alloc] initWithTitle:@"File"];
     
@@ -78,7 +72,6 @@
     [fileMenuItem setSubmenu:fileMenu];
     [mainMenu addItem:fileMenuItem];
     
-    // Edit Menu
     NSMenuItem *editMenuItem = [[NSMenuItem alloc] init];
     NSMenu *editMenu = [[NSMenu alloc] initWithTitle:@"Edit"];
     
@@ -101,7 +94,6 @@
     [editMenuItem setSubmenu:editMenu];
     [mainMenu addItem:editMenuItem];
     
-    // View Menu
     NSMenuItem *viewMenuItem = [[NSMenuItem alloc] init];
     NSMenu *viewMenu = [[NSMenu alloc] initWithTitle:@"View"];
     
@@ -122,7 +114,7 @@
 }
 
 - (void)applicationWillTerminate:(NSNotification *)notification {
-    NSLog(@"PHPN Shutting down");
+    NSLog(@"━━━ PHPN SHUTTING DOWN ━━━");
     
     phpn_bridge_cleanup();
     php_runtime_destroy(_phpRuntime);

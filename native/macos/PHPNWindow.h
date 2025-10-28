@@ -8,6 +8,7 @@
 @property (nonatomic) PHPRuntime *phpRuntime;
 @property (strong, nonatomic) NSString *appPath;
 @property (strong, nonatomic) NSString *appDirectory;
+@property (strong, nonatomic) NSMutableDictionary *cookieJar;
 
 - (instancetype)initWithPHPRuntime:(PHPRuntime *)runtime 
                            appPath:(NSString *)path
