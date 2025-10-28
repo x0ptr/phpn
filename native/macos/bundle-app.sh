@@ -53,6 +53,16 @@ fi
 echo "Copying PHP application..."
 cp -R "$PHP_APP_DIR" "$RESOURCES_DIR/app"
 
+if [ -d "$RESOURCES_DIR/app/vendor/x0ptr/phpn/native/macos/php-build" ]; then
+    echo "Removing php-build artifacts..."
+    rm -rf "$RESOURCES_DIR/app/vendor/x0ptr/phpn/native/macos/php-build"
+fi
+
+if [ -d "$RESOURCES_DIR/app/vendor/x0ptr/phpn/native/macos/build" ]; then
+    echo "Removing build artifacts..."
+    rm -rf "$RESOURCES_DIR/app/vendor/x0ptr/phpn/native/macos/build"
+fi
+
 cat > "$MACOS_DIR/${APP_NAME}" << 'EOF'
 #!/bin/bash
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"

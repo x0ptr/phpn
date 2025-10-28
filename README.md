@@ -6,7 +6,7 @@ I got tired of Electron apps eating all my RAM, so I made this. Uses your system
 
 ## Why?
 
-- Smaller bundle size (~10MB vs Electron's ~150MB)
+- Smaller bundle size (~50-100MB vs Electron's ~150MB+)
 - Uses native WebKit instead of bundling Chromium
 - Write desktop apps in PHP like you'd write web apps
 - Works with Laravel, Symfony, or any PHP code
@@ -138,6 +138,18 @@ The bundled app will be in `native/macos/build/My App.app` (or `vendor/phpn/phpn
 
 The bundle includes the PHP runtime and your entire app, so users don't need PHP installed.
 
+### Reducing Bundle Size
+
+The bundling process automatically removes build artifacts from `vendor/x0ptr/phpn/`. For even smaller bundles:
+
+```bash
+composer install --no-dev
+php artisan desktop:bundle "My App"
+composer install 
+```
+
+You can also exclude unnecessary files by creating a custom bundle script or using `.gitattributes` export-ignore.
+
 ## Building
 
 ```bash
@@ -153,7 +165,6 @@ This compiles PHP with the embed SAPI, builds the native macOS app, and puts eve
 To create a release with prebuilt binaries:
 
 ```bash
-# Tag and push
 git tag v1.0.0
 git push origin v1.0.0
 ```
@@ -178,7 +189,7 @@ Then upload the archives in `native/dist/` to the GitHub release.
 
 ## Why Not Just Use Electron?
 
-Electron bundles an entire Chromium browser. PHPN uses the WebKit that's already on your Mac. The whole runtime is like 10MB instead of 150MB+.
+Electron bundles an entire Chromium browser. PHPN uses the WebKit that's already on your Mac. A typical bundle is 50-100MB (mostly your app + PHP runtime + dependencies) instead of 150MB+ with Electron.
 
 Also I like PHP.
 
