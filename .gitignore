@@ -4,6 +4,7 @@ native/macos/php-build/
 native/macos/runtime/
 native/windows/build/
 native/linux/build/
+native/linux/runtime/
 dist/
 
 # IDE files

@@ -1,7 +1,7 @@
 #!/usr/bin/env php
 <?php
 
-define('PHPN_VERSION', '0.0.3');
+define('PHPN_VERSION', '0.1.1');
 define('PHPN_REPO', 'x0ptr/phpn');
 
 function detectPlatform() {
@@ -128,7 +128,9 @@ function getRuntimePath() {
     
     switch ($platform['os']) {
         case 'Darwin':
-            return $baseDir . '/native/macos/build/phpn-runtime';
+		return $baseDir . '/native/macos/build/phpn-runtime';
+	case 'Linux':
+		return $baseDir . '/native/linux/build/phpn-runtime';
         default:
             return null;
     }
@@ -249,11 +251,15 @@ function buildRuntime() {
             echo "Please build manually using CMake.\n";
             return false;
             
-        case 'Linux':
-            echo "Linux build not yet implemented.\n";
-            echo "Please build manually using CMake.\n";
-            return false;
-            
+	case 'Linux':
+	    $buildScript = $baseDir . '/native/linux/build.sh';
+            if (!file_exists($buildScript)) {
+                echo "Error: Build script not found: $buildScript\n";
+                return false;
+            }
+            echo "Building PHPN runtime for Linux...\n";
+            passthru("cd " . escapeshellarg(dirname($buildScript)) . " && ./build.sh", $exitCode);
+            return $exitCode === 0;
         default:
             echo "Unsupported platform: {$platform['os']}\n";
             return false;

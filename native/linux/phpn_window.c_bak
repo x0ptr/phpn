@@ -1,0 +1,126 @@
+#define _GNU_SOURCE
+#include "phpn_window.h"
+#include "php_runtime.h"
+
+struct _PHPNWindow {
+	GtkWindow parent;
+	WebKitWebView *webview;
+	PHPRuntime *php_runtime;
+	char *app_path;
+	char *app_directory;
+	GHashTable *cookie_jar;
+};
+
+G_DEFINE_TYPE(PHPNWindow, phpn_window, GTK_TYPE_WINDOW);
+
+static gboolean on_decide_policy(WebKitWebView *webview,
+			WebKitPolicyDecision *decision,
+			WebKitPolicyDecisionType type,
+			PHPNWindow *window);
+
+static void phpn_window_init(PHPNWindow *window) {
+	window->cookie_jar = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+}
+
+static void phpn_window_class_init(PHPNWindowClass *class) {}
+
+PHPNWindow* phpn_window_new(PHPRuntime *runtime, const char *path,
+		int width, int height, const char *title) {
+	PHPNWindow *window = g_object_new(PHPN_TYPE_WINDOW, NULL);
+
+	window->php_runtime = runtime;
+	window->app_path = g_strdup(path);
+	window->app_directory = g_path_get_dirname(path);
+
+	gtk_window_set_title(GTK_WINDOW(window), title ? title : "PHPN Application");
+	gtk_window_set_default_size(GTK_WINDOW(window), width, height);
+
+	window->webview = WEBKIT_WEB_VIEW(webkit_web_view_new());
+	gtk_window_set_child(GTK_WINDOW(window), GTK_WIDGET(window->webview));
+
+	g_signal_connect(window->webview, "decide-policy",
+			G_CALLBACK(on_decide_policy), window);
+
+	phpn_window_load_initial_page(window);
+
+	return window;
+}
+
+static gboolean on_decide_policy(WebKitWebView *webview,
+                                 WebKitPolicyDecision *decision,
+                                 WebKitPolicyDecisionType type,
+                                 PHPNWindow *window) {
+    if (type == WEBKIT_POLICY_DECISION_TYPE_NAVIGATION_ACTION) {
+        WebKitNavigationAction *action = webkit_navigation_policy_decision_get_navigation_action(
+            WEBKIT_NAVIGATION_POLICY_DECISION(decision));
+
+        WebKitURIRequest *request = webkit_navigation_action_get_request(action);
+        const char *uri = webkit_uri_request_get_uri(request);
+
+        phpn_window_execute_php(window, uri);
+
+        webkit_policy_decision_ignore(decision);
+        return TRUE;
+    }
+
+    return FALSE;
+}
+
+void phpn_window_load_initial_page(PHPNWindow *window) {
+    g_return_if_fail(PHPN_IS_WINDOW(window));
+
+    phpn_window_execute_php(window, window->app_path);
+}
+
+void phpn_window_execute_php(PHPNWindow *window, const char *uri) {
+    g_return_if_fail(PHPN_IS_WINDOW(window));
+
+    GUri *parsed_uri = g_uri_parse(uri, G_URI_FLAGS_NONE, NULL);
+    const char *path = parsed_uri ? g_uri_get_path(parsed_uri) : uri;
+    const char *query = parsed_uri ? g_uri_get_query(parsed_uri) : NULL;
+
+    char *script_path;
+    if (g_path_is_absolute(path)) {
+        script_path = g_strdup(path);
+    } else {
+        script_path = g_build_filename(window->app_directory, path, NULL);
+    }
+
+    const char *request_uri = query ?
+        g_strdup_printf("%s?%s", path, query) :
+        g_strdup(path);
+
+    PHPRequest request = {
+        .method = "GET",
+        .content_type = NULL,
+        .post_data = NULL,
+        .post_data_length = 0,
+        .cookies = NULL,
+        .user_agent = "PHPN/1.0 (WebKitGTK)",
+        .xsrf_token = NULL
+    };
+
+    char *html = php_runtime_execute(
+        window->php_runtime,
+        script_path,
+        request_uri,
+        &request
+    );
+
+    if (html) {
+        webkit_web_view_load_html(window->webview, html, NULL);
+        free(html);
+    } else {
+        const char *error_html =
+            "<html><body><h1>Error: Could not load PHP file</h1></body></html>";
+        webkit_web_view_load_html(window->webview, error_html, NULL);
+    }
+
+    g_free(script_path);
+    if (parsed_uri) g_uri_unref(parsed_uri);
+}
+
+void phpn_window_reload(PHPNWindow *window) {
+    g_return_if_fail(PHPN_IS_WINDOW(window));
+    phpn_window_load_initial_page(window);
+}
