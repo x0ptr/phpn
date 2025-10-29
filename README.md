@@ -1,4 +1,4 @@
-# PHPN (WIP - So many stuff not working right now. Sessions etc.)
+# PHPN - very WIP
 
 PHP Native - Build desktop apps with PHP and native WebKit.
 
@@ -15,7 +15,7 @@ https://github.com/user-attachments/assets/fbf6d3f2-e1f4-487d-adfb-f104e6004d1f
 ## Requirements
 
 
-- PHP 8.1+
+- PHP 8.4+
 - macOS 11+ (Windows/Linux support coming)
 - CMake 3.15+
 - Xcode CLI tools
